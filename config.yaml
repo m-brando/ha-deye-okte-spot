@@ -1,0 +1,80 @@
+ha:
+  url: "http://homeassistant.local:8123"
+  # Generate in HA: Profile > Long-Lived Access Tokens
+  token: "<token>"
+
+okte:
+  # Retry settings if prices are not yet published when fetch runs
+  fetch_retries: 3
+  fetch_retry_delay: 1800  # seconds between retries (1800 = 30 minutes)
+
+# Time-of-Use Program 6 settings (always-on; SOC threshold rewritten every 15 min)
+# Program 6 is used because, on this firmware, when multiple ToU programs share
+# the same start time the *highest-numbered* one wins the tiebreak.
+program:
+  discharge_power: 2000        # W — max battery discharge rate when ToU permits
+  target_soc_floor: 26         # % — never set program SOC below this on positive slots
+  pv_detection_threshold: 100  # W — combined PV1+PV2 above this means "sun is producing"
+
+# Deye LV 3-Phase entity IDs
+deye:
+  work_mode: "select.deye_inverter_work_mode"
+  energy_pattern: "select.deye_inverter_energy_pattern"
+  smart_load: "switch.deye_inverter_smartload_on_grid"
+  export_surplus: "switch.deye_inverter_export_surplus"
+  time_of_use: "select.deye_inverter_time_of_use"
+  battery_soc: "sensor.deye_inverter_battery"
+  pv_power: "sensor.deye_inverter_pv_power"   # sum of PV1+PV2; used for "sun is up" detection
+  # Time of Use Program 6 — the active program (script rewrites SOC every 15 min)
+  program_6_time: "time.deye_inverter_program_6_time"
+  program_6_power: "number.deye_inverter_program_6_power"
+  program_6_soc: "number.deye_inverter_program_6_soc"
+  program_6_charging: "select.deye_inverter_program_6_charging"
+
+# Programs 1–5 are pinned to safe defaults as a fallback. On this firmware
+# Program 6 wins the tiebreak when all programs share start time 00:00:00,
+# so 1–5 only take effect if Program 6 is somehow unset. Reapplied daily by
+# `fetch` to defend against drift (HA UI edits, integrations, reboots).
+safe_programs:
+  indexes: [1, 2, 3, 4, 5]
+  entity_template:
+    time: "time.deye_inverter_program_{i}_time"
+    power: "number.deye_inverter_program_{i}_power"
+    soc: "number.deye_inverter_program_{i}_soc"
+    charging: "select.deye_inverter_program_{i}_charging"
+  values:
+    time: "00:00:00"
+    power: 2000        # W
+    soc: 26            # %
+    charging: "Disabled"
+
+# Inverter mode per slot. The decision tree at apply time:
+#   price < 0                                                  → negative
+#   price >= 0  AND  PV > threshold  AND  more negs today      → positive_export
+#   otherwise                                                  → positive_self_consume
+modes:
+  negative:  # price < 0 — block all export, allow PV to charge battery up to 100%
+    work_mode: "Zero Export To CT"
+    energy_pattern: "Load First"
+    export_surplus: false
+    smart_load: true
+    time_of_use: "Enabled"
+
+  positive_export:  # daytime positive slot with negatives still ahead today —
+                    # preserve battery via SOC ratchet (max(current,26)) so the
+                    # upcoming negative window can charge it from PV
+    work_mode: "Export First"
+    energy_pattern: "Load First"
+    export_surplus: true
+    smart_load: false
+    time_of_use: "Enabled"
+
+  positive_self_consume:  # no more negatives today, OR before sunrise / after
+                          # sunset — battery freely discharges to home loads
+                          # down to 26% floor; solar surplus still sells via
+                          # Solar Sell. Battery never exports to grid.
+    work_mode: "Zero Export To CT"
+    energy_pattern: "Load First"
+    export_surplus: true     # Solar Sell — only PV surplus exports
+    smart_load: true
+    time_of_use: "Enabled"

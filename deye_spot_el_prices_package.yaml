@@ -1,0 +1,44 @@
+# ── Deye Spot Electricity Prices Package ──────────────────────────────────────
+# Package name = filename stem: "deye_spot_el_prices_package"
+# Drop into config/packages/ and enable packages in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+
+shell_command:
+  spot_fetch: "/config/spot_automation/venv/bin/python /config/spot_automation/spot_automation.py fetch >> /config/spot_automation/spot.log 2>&1"
+  spot_apply: "/config/spot_automation/venv/bin/python /config/spot_automation/spot_automation.py apply >> /config/spot_automation/spot.log 2>&1"
+
+automation:
+  # 16:00 — fetch next-day prices (OKTE publishes by 15:30 CET; 30 min margin)
+  - id: spot_fetch_next_day_prices
+    alias: "Spot: Fetch next-day prices"
+    trigger:
+      - platform: time
+        at: "16:00:00"
+    action:
+      - service: shell_command.spot_fetch
+      - service: notify.persistent_notification
+        data:
+          title: "Spot prices fetched"
+          message: "Next-day OKTE price schedule updated."
+    mode: single
+
+  # 15 s before each 15-min slot boundary: HH:14:45 / :29:45 / :44:45 / :59:45
+  - id: spot_apply_inverter_mode
+    alias: "Spot: Apply inverter mode for upcoming slot"
+    trigger:
+      - platform: time_pattern
+        minutes: 14
+        seconds: 45
+      - platform: time_pattern
+        minutes: 29
+        seconds: 45
+      - platform: time_pattern
+        minutes: 44
+        seconds: 45
+      - platform: time_pattern
+        minutes: 59
+        seconds: 45
+    action:
+      - service: shell_command.spot_apply
+    mode: single

@@ -1,0 +1,18 @@
+# Python                                                                                                                                                                                
+venv/
+__pycache__/                                                                                                                                                                            
+*.pyc                                                     
+*.pyo
+
+# Generated runtime data                                                                                                                                                                
+schedule.json
+schedule_next.json                                                                                                                                                                      
+spot.log                        
+
+# Local config (contains HA token - removed)
+# config.yaml
+                                                                                                                                                                                        
+# Editor                                                  
+.idea/
+.vscode/
+*.swp
