@@ -12,7 +12,7 @@ This automation tracks those prices and switches the inverter into one of three 
 
 | Market situation | What happens |
 |---|---|
-| **Negative price** (exporting costs you) | Inverter blocks all export (`Zero Export To CT`), Smart Load turns ON, battery target SOC = 100 % so PV charges the battery instead of going to grid |
+| **Negative price** (exporting costs you) | Inverter blocks all export (`Zero Export To CT`), Smart Load turns ON, battery target SOC = 26 % so PV is free to charge the battery (export is blocked by `work_mode` anyway) |
 | **Positive price**, more negatives still ahead today, **and PV is producing** | "Export First" mode preserves the battery via the `max(current SOC, 26)` SOC ratchet so it stays available to absorb the upcoming negative window's PV; solar surplus exports to grid |
 | **Positive price**, no more negatives today **OR** before sunrise / after sunset | `Zero Export To CT` + Solar Sell — battery freely discharges to home loads down to the 26 % floor; solar surplus still exports |
 
@@ -50,7 +50,7 @@ Every day at **16:00** the script downloads **tomorrow's** 96 price slots from O
 │  │                  → rename next → active (rollover)      │    │
 │  │                                                         │    │
 │  │             price < 0       → negative                  │    │
-│  │                                Program 6 SOC = 100      │    │
+│  │                                Program 6 SOC = 26       │    │
 │  │             price ≥ 0 AND   → positive_export           │    │
 │  │             negs ahead AND    Program 6 SOC =           │    │
 │  │             PV > 100 W        max(current %, 26)        │    │
@@ -99,7 +99,9 @@ price < 0  →  mode = "negative"
               export_surplus = OFF                  block all export
               smart_load     = ON                   consume surplus locally
               time_of_use    = Enabled
-              Program 6 SOC  = 100                  PV can fully charge battery - not really used/needed in "Zero Export To CT"
+              Program 6 SOC  = 26                   battery free to charge
+                                                    from PV; export blocked
+                                                    by work_mode anyway
 
 price ≥ 0 AND has_remaining_negatives_today AND PV > 100 W
            →  mode = "positive_export"
