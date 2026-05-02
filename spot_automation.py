@@ -292,8 +292,8 @@ def cmd_apply(config: dict) -> None:
 
     if period["price"] < 0:
         mode_name = "negative"
-        target_soc = 100
-        log.info("%s → NEGATIVE | program SOC=100 (PV-only charge)", slot_label)
+        target_soc = floor
+        log.info("%s → NEGATIVE | program SOC=%d", slot_label, target_soc)
     else:
         more_negs = has_remaining_negatives_today(target_time, data["schedule"])
         pv_power = float(ha.get_state(deye["pv_power"])["state"]) if more_negs else 0.0
