@@ -16,3 +16,4 @@ spot.log
 .idea/
 .vscode/
 *.swp
+.claude/
