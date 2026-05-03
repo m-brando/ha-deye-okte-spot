@@ -6,19 +6,19 @@ Automatically controls a **Deye LV 3-Phase Hybrid Inverter** via Home Assistant 
 
 ## What it does (non-technical)
 
-Electricity on the wholesale market is priced every 15 minutes. Most of the time the price is positive — you pay to use electricity from the grid, and you get paid for what you sell. Occasionally — typically at solar/wind peaks — the price goes **negative**: you would have to *pay* to export.
+Electricity on the wholesale market is priced every 15 minutes. Most of the time the price is positive, so you pay to use electricity from the grid, and you get paid for what you sell (or, as a household, you bank that excess in a virtual-battery product such as *požičovňa batérie* / *virtuálna batéria*). Occasionally, typically at solar/wind peaks, the price goes **negative**: you would have to *pay* to export, in case of hausehold the virtual-battery scheme stops accepting your excess.                                              
 
-This automation tracks those prices and switches the inverter into one of three modes for every 15-minute window. The battery **never** sells to grid and **never** charges from grid — it only ever exchanges energy with PV (charge) and home loads (discharge):
+This automation tracks those prices and switches the inverter into one of three modes for every 15-minute window. By default the automation is set so the battery **never** sells to grid and **never** charges from grid; it only ever exchanges energy with PV (charge) and home loads (discharge), though this can be changed in config file:
 
 | Market situation | What happens |
 |---|---|
-| **Negative price** (exporting costs you) | Inverter blocks all export (`Zero Export To CT`), Smart Load turns ON, battery target SOC = 26 % so PV is free to charge the battery (export is blocked by `work_mode` anyway) |
-| **Positive price**, more negatives still ahead today, **and PV is producing** | "Export First" mode preserves the battery via the `max(current SOC, 26)` SOC ratchet so it stays available to absorb the upcoming negative window's PV; solar surplus exports to grid |
-| **Positive price**, no more negatives today **OR** before sunrise / after sunset | `Zero Export To CT` + Solar Sell — battery freely discharges to home loads down to the 26 % floor; solar surplus still exports |
+| **Negative price** (exporting costs you) | Inverter blocks all export (`Zero Export To CT`), Smart Load turns ON, battery target SOC = 26 % so PV is free to charge the battery |
+| **Positive price**, more negatives still ahead today, **and PV is producing** | "Export First" mode preserves the battery via the `max(current SOC, 26)` and effectively disable selling batery power to grid; solar surplus exports to grid |
+| **Positive price**, no more negatives today **OR** before sunrise / after sunset | `Zero Export To CT` + Solar Sell, so the battery freely discharges to home loads down to the 26 % floor; solar surplus still exports |
 
 The middle case is the only one where the inverter is in `Export First`; the SOC ratchet makes sure even then the battery cannot be sold to grid. Overnight always falls into the third case (PV = 0), so any leftover battery from the previous day is used to power the home through the night.
 
-Every day at **16:00** the script downloads **tomorrow's** 96 price slots from OKTE's public API and stores them as `schedule_next.json`, then re-asserts safe defaults on Programs 1–5 (the fallback ToU programs). From then on, every 15 minutes (15 seconds before each slot boundary) the script reads the upcoming slot, the current battery SOC, and current PV power, then reconfigures **only Program 6** for that single slot — Programs 1–5 are left at their safety-net values and are never modified by the per-slot apply. Program 6 was identified by empirical testing as the program this firmware actually applies when all six ToU programs share start time `00:00:00` (the highest-numbered one wins the tiebreak), so it is the one that controls real behavior. When the day rolls over at midnight, the apply routine automatically promotes `schedule_next.json` to the active `schedule.json` — no separate midnight cron is needed.
+Every day at **16:00** the script downloads **tomorrow's** 96 price slots from OKTE's public API and stores them as `schedule_next.json`, then re-asserts safe defaults on Programs 1–5 (the fallback ToU programs). From then on, every 15 minutes (15 seconds before each slot boundary) the script reads the upcoming slot, the current battery SOC, and current PV power, then reconfigures **only Program 6** for that single slot. Programs 1–5 are left at their safety-net values and are never modified by the per-slot apply. Program 6 was identified by empirical testing as the program that actually applies when all six ToU programs share start time `00:00:00` (the highest-numbered one wins the tiebreak), so it is the one that controls real behavior. When the day rolls over at midnight, the apply routine automatically promotes `schedule_next.json` to the active `schedule.json`, so no separate midnight cron is needed.
 
 ---
 
@@ -78,12 +78,12 @@ External:
 
 ### Data flow
 
-1. **16:00 daily** — `fetch` runs, downloads **tomorrow's** prices from OKTE API
+1. **16:00 daily**: `fetch` runs, downloads **tomorrow's** prices from OKTE API
    - 96 × 15-min periods, each with `price` in EUR/MWh
-   - Saves to `schedule_next.json` — does **not** touch the active `schedule.json`
+   - Saves to `schedule_next.json`; does **not** touch the active `schedule.json`
    - Re-asserts safe defaults on ToU Programs 1–5 (see "Program layout" below)
 
-2. **Every 15 min, at HH:14:45 / :29:45 / :44:45 / :59:45** — `apply` runs
+2. **Every 15 min, at HH:14:45 / :29:45 / :44:45 / :59:45**: `apply` runs
    - Computes `target_time = now + 30 s` (the slot about to begin)
    - If `schedule.json` doesn't cover `target_time` but `schedule_next.json` does
      → rename `schedule_next.json` → `schedule.json` (midnight rollover)
@@ -117,11 +117,11 @@ price ≥ 0 AND has_remaining_negatives_today AND PV > 100 W
                                                     this prevent discharging
                                                     of battery
 
-otherwise (price ≥ 0 — overnight, post-sunset, or no more negs today)
+otherwise (price ≥ 0, overnight, post-sunset, or no more negs today)
            →  mode = "positive_self_consume"
               work_mode      = "Zero Export To CT"  battery cannot export
               energy_pattern = "Load First"
-              export_surplus = ON                   Solar Sell — only PV
+              export_surplus = ON                   Solar Sell, so only PV
                                                     surplus exports
               smart_load     = ON
               time_of_use    = Enabled
@@ -138,7 +138,7 @@ schedule: it returns `True` if any slot starting after the current target time,
 on the same local-time calendar day, has a negative price. The "today"
 boundary is local-day; cross-midnight negatives on tomorrow do not count.
 
-Battery charges from solar only — `program_6_charging` is always `Disabled`.
+Battery charges from solar only; `program_6_charging` is always `Disabled`.
 Time of Use is always Enabled; **Program 6 is the active program** (its `time`
 is fixed at `00:00:00`). Each apply rewrites Program 6's SOC threshold and
 toggles work_mode.
@@ -146,7 +146,7 @@ toggles work_mode.
 ### Program layout (ToU 1–6)
 
 All six ToU programs share start time `00:00:00`. On this firmware the
-**highest-numbered** program with a "passed" start time wins the tiebreak — so
+**highest-numbered** program with a "passed" start time wins the tiebreak, so
 Program 6 is always selected during normal operation, and Programs 1–5 sit
 underneath as a fallback.
 
@@ -156,13 +156,13 @@ underneath as a fallback.
 | 6       | Active     | `00:00:00` | `discharge_power` | per-slot | Disabled | `apply` (every 15 min) |
 
 If something ever leaves Program 6 in a bad state, the inverter falls back to
-one of 1–5 — battery floored at 26 %, no grid charging, modest discharge — which
+one of 1–5 (battery floored at 26 %, no grid charging, modest discharge), which
 is a benign state. The daily re-write of 1–5 by `fetch` defends against drift
 from manual UI edits, integrations, or reboots.
 
 > **Note:** `Zero Export To CT` requires an external CT clamp installed (manual section 3.6).
 > If you don't have one, change `work_mode` under `negative` to `Zero Export To Load`
-> (backup loads only — home circuits won't be powered by the inverter).
+> (backup loads only; home circuits won't be powered by the inverter).
 
 ### Schedule file lifecycle
 
@@ -177,7 +177,7 @@ D    00:14:45 apply  → uses schedule.json (D's slots)
 D    16:00   fetch   → writes schedule_next.json (delivery_day = D+1)
 ```
 
-This keeps the *current* day's schedule intact across the 16:00 fetch — the
+This keeps the *current* day's schedule intact across the 16:00 fetch. The
 old single-file design used to no-op the whole 16:00–24:00 window because the
 file had been overwritten with tomorrow's prices.
 
@@ -199,7 +199,7 @@ el-spot/
 - **Params:** `deliveryDayFrom`, `deliveryDayTo` (ISO 8601 date)
 - **Returns:** JSON array of 96 objects (one per 15-min MTU period)
 - **Key fields:** `price` (EUR/MWh), `deliveryStart`, `deliveryEnd` (UTC ISO 8601), `period` (1–96)
-- **Publishes:** no later than 15:30 CET per official OKTE FAQ — the 16:00 fetch has a 30-min safety margin
+- **Publishes:** no later than 15:30 CET per official OKTE FAQ; the 16:00 fetch has a 30-min safety margin
 
 ---
 
@@ -247,16 +247,16 @@ Verify that the option strings match your inverter's exact labels:
 
 Adjust `program.discharge_power` (W) and `program.target_soc_floor` (%) to
 taste. The default floor is **26 %**, chosen as a 1 % safety margin above this
-battery's hardware shutdown threshold of 25 %. Setting the floor at or below
-25 % would let the inverter try to discharge through the shutdown point. If
+low battery threshold of 25 %. Setting the floor at or below
+25 % would let the inverter try to periodicaly charge and discharge through the Low Batt point. If
 your battery's low-SOC cutoff is different, set the floor to `cutoff + 1` (or
 higher).
 
 The `safe_programs` block defines the fallback values written to Programs 1–5
 once a day. The defaults (`time=00:00:00`, `power=2000`, `soc=26`,
-`charging=Disabled`) are deliberately conservative — change them only if you
+`charging=Disabled`) are deliberately conservative; change them only if you
 understand the safety implications. The `soc=26` here is for the same reason
-as the `target_soc_floor` above (1 % above the 25 % battery shutdown).
+as the `target_soc_floor` above (1 % above the 25 % low battery treshold).
 
 > **Firmware note on tiebreaks.** This automation assumes the
 > *highest-numbered* ToU program wins when multiple programs share start time
@@ -298,15 +298,15 @@ venv/bin/python spot_automation.py apply
 
 ## Troubleshooting
 
-**"OKTE returned empty response"** — Prices for the next day are published daily at no later than 15:30 on the following trading day. Running `fetch` before that will fail. The automation runs at 16:00 to avoid this; manual retries respect the configured backoff.
+**"OKTE returned empty response"**: Prices for the next day are published daily no later than 15:30 on the following trading day. Running `fetch` before that will fail. The automation runs at 16:00 to avoid this; manual retries respect the configured backoff.
 
-**"No schedule covers <time>"** — Either you've never run `fetch`, or both `schedule.json` and `schedule_next.json` are stale (e.g., a fetch failure left them outdated). Run `fetch` and wait for the next slot boundary.
+**"No schedule covers <time>"**: Either you've never run `fetch`, or both `schedule.json` and `schedule_next.json` are stale (e.g., a fetch failure left them outdated). Run `fetch` and wait for the next slot boundary.
 
-**Inverter entities not found / service call fails** — Double-check entity IDs in `config.yaml`. Use HA Developer Tools → Template to test: `{{ states('select.your_entity_id') }}`.
+**Inverter entities not found / service call fails**: Double-check entity IDs in `config.yaml`. Use HA Developer Tools → Template to test: `{{ states('select.your_entity_id') }}`.
 
-**Wrong work mode / ToU option strings** — In HA Developer Tools → States, click the relevant select entity and check the `options` attribute for the exact strings your inverter exposes. Update `config.yaml` accordingly.
+**Wrong work mode / ToU option strings**: In HA Developer Tools → States, click the relevant select entity and check the `options` attribute for the exact strings your inverter exposes. Update `config.yaml` accordingly.
 
-**Apply fires at the wrong second** — Confirm your HA host clock is accurate (NTP). The cron triggers at second 45 of minutes 14/29/44/59; the script then targets `now + 30 s` to land safely inside the upcoming slot.
+**Apply fires at the wrong second**: Confirm your HA host clock is accurate (NTP). The cron triggers at second 45 of minutes 14/29/44/59; the script then targets `now + 30 s` to land safely inside the upcoming slot.
 
 ## Official User Manual 
 https://www.deyeinverter.com/deyeinverter/2024/02/03/instructions_sun-5-12k-sg04lp3-eu_240203_en.pdf
