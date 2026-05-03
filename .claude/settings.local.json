@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebFetch(domain:www.okte.sk)",
-      "WebFetch(domain:isot.okte.sk)",
-      "WebFetch(domain:www.deyeinverter.com)"
-    ]
-  }
-}
