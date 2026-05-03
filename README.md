@@ -305,3 +305,6 @@ venv/bin/python spot_automation.py apply
 **Wrong work mode / ToU option strings** — In HA Developer Tools → States, click the relevant select entity and check the `options` attribute for the exact strings your inverter exposes. Update `config.yaml` accordingly.
 
 **Apply fires at the wrong second** — Confirm your HA host clock is accurate (NTP). The cron triggers at second 45 of minutes 14/29/44/59; the script then targets `now + 30 s` to land safely inside the upcoming slot.
+
+## Official User Manual 
+https://www.deyeinverter.com/deyeinverter/2024/02/03/instructions_sun-5-12k-sg04lp3-eu_240203_en.pdf
