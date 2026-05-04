@@ -168,20 +168,48 @@ class HAClient:
         resp.raise_for_status()
         return resp.json()
 
+    def _current_state(self, entity_id: str) -> str | None:
+        """Best-effort current-state read; returns None on failure so caller writes anyway."""
+        try:
+            return self.get_state(entity_id).get("state")
+        except Exception as e:
+            log.warning("  read failed for %s (%s); will write", entity_id, e)
+            return None
+
     def set_select(self, entity_id: str, option: str) -> None:
-        log.info("  select  %s → %s", entity_id, option)
+        current = self._current_state(entity_id)
+        if current == option:
+            log.info("  select  %s = %s (unchanged)", entity_id, option)
+            return
+        log.info("  select  %s: %s → %s", entity_id, current, option)
         self._post("services/select/select_option", {"entity_id": entity_id, "option": option})
 
     def set_switch(self, entity_id: str, on: bool) -> None:
-        log.info("  switch  %s → %s", entity_id, "ON" if on else "OFF")
+        desired = "on" if on else "off"
+        current = self._current_state(entity_id)
+        if current == desired:
+            log.info("  switch  %s = %s (unchanged)", entity_id, desired.upper())
+            return
+        log.info("  switch  %s: %s → %s", entity_id, current, desired.upper())
         self._post(f"services/switch/{'turn_on' if on else 'turn_off'}", {"entity_id": entity_id})
 
     def set_number(self, entity_id: str, value: float) -> None:
-        log.info("  number  %s → %s", entity_id, value)
+        current_raw = self._current_state(entity_id)
+        try:
+            if current_raw is not None and float(current_raw) == float(value):
+                log.info("  number  %s = %s (unchanged)", entity_id, value)
+                return
+        except (TypeError, ValueError):
+            pass
+        log.info("  number  %s: %s → %s", entity_id, current_raw, value)
         self._post("services/number/set_value", {"entity_id": entity_id, "value": value})
 
     def set_time(self, entity_id: str, value: str) -> None:
-        log.info("  time    %s → %s", entity_id, value)
+        current = self._current_state(entity_id)
+        if current == value:
+            log.info("  time    %s = %s (unchanged)", entity_id, value)
+            return
+        log.info("  time    %s: %s → %s", entity_id, current, value)
         self._post("services/time/set_value", {"entity_id": entity_id, "time": value})
 
 
