@@ -296,12 +296,20 @@ def cmd_apply(config: dict) -> None:
         log.info("%s → NEGATIVE | program SOC=%d", slot_label, target_soc)
     else:
         more_negs = has_remaining_negatives_today(target_time, data["schedule"])
-        pv_power = float(ha.get_state(deye["pv_power"])["state"]) if more_negs else 0.0
+        try:
+            pv_power = float(ha.get_state(deye["pv_power"])["state"])
+        except (ValueError, KeyError) as e:
+            log.warning("PV sensor unreadable (%s); assuming 0 W", e)
+            pv_power = 0.0
         pv_up = pv_power > pv_threshold
 
         if more_negs and pv_up:
             mode_name = "positive_export"
-            current_soc = float(ha.get_state(deye["battery_soc"])["state"])
+            try:
+                current_soc = float(ha.get_state(deye["battery_soc"])["state"])
+            except (ValueError, KeyError) as e:
+                log.warning("Battery SOC sensor unreadable (%s); using floor", e)
+                current_soc = floor
             target_soc = max(current_soc, floor)
             log.info(
                 "%s → POSITIVE_EXPORT | pv=%.0fW negs_ahead=True | battery=%.0f%% floor=%d → program SOC=%.0f",
@@ -376,7 +384,11 @@ def main() -> None:
         sys.exit(1)
 
     config = load_config()
-    COMMANDS[sys.argv[1]](config)
+    try:
+        COMMANDS[sys.argv[1]](config)
+    except Exception:
+        log.exception("Command %s failed", sys.argv[1])
+        sys.exit(1)
 
 
 if __name__ == "__main__":
