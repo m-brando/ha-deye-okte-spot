@@ -140,8 +140,18 @@ boundary is local-day; cross-midnight negatives on tomorrow do not count.
 
 Battery charges from solar only; `program_6_charging` is always `Disabled`.
 Time of Use is always Enabled; **Program 6 is the active program** (its `time`
-is fixed at `00:00:00`). Each apply rewrites Program 6's SOC threshold and
-toggles work_mode.
+is fixed at `00:00:00`). Each apply recomputes Program 6's SOC threshold and
+work_mode for the upcoming slot.
+
+### Idempotent writes
+
+Every setter (`select`, `switch`, `number`, `time`) reads the entity's current
+state from HA before writing. If the current value already matches the desired
+value, the POST is skipped and the action is logged as `unchanged`. Two
+consecutive slots that resolve to the same mode and SOC therefore produce zero
+writes to the inverter — only the GETs needed to compare. If a state read
+fails, the write proceeds anyway (fail-safe: better to over-write than leave
+the inverter mis-configured).
 
 ### Program layout (ToU 1–6)
 
