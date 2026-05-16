@@ -56,7 +56,7 @@ Every day at **16:00** the script downloads **tomorrow's** 96 price slots from O
 │  │             PV > 100 W        max(current %, 26)        │    │
 │  │             otherwise       → positive_self_consume     │    │
 │  │                                Program 6 SOC = 26       │    │
-│  │             (ToU always Enabled; no grid charging)      │    │
+│  │             (ToU always on; no grid charging)           │    │
 │  └─────────────────────────────────────────────────────────┘    │
 │                              │                                  │
 │                    HA REST API  (Bearer token)                  │
@@ -98,7 +98,7 @@ price < 0  →  mode = "negative"
               energy_pattern = "Load First"
               export_surplus = OFF                  block all export
               smart_load     = ON                   consume surplus locally
-              time_of_use    = Enabled
+              time_of_use    = Week
               Program 6 SOC  = 26                   battery free to charge
                                                     from PV; export blocked
                                                     by work_mode anyway
@@ -109,7 +109,7 @@ price ≥ 0 AND has_remaining_negatives_today AND PV > 100 W
               energy_pattern = "Load First"
               export_surplus = ON                   sell solar surplus
               smart_load     = OFF
-              time_of_use    = Enabled
+              time_of_use    = Week
               Program 6 SOC  = max(current %, 26)   freeze battery at current
                                                     level so the upcoming
                                                     negative slot can absorb
@@ -124,7 +124,7 @@ otherwise (price ≥ 0, overnight, post-sunset, or no more negs today)
               export_surplus = ON                   Solar Sell, so only PV
                                                     surplus exports
               smart_load     = ON
-              time_of_use    = Enabled
+              time_of_use    = Week
               Program 6 SOC  = 26                   battery freely discharges
                                                     to home loads down to 26 %
 ```
@@ -139,7 +139,7 @@ on the same local-time calendar day, has a negative price. The "today"
 boundary is local-day; cross-midnight negatives on tomorrow do not count.
 
 Battery charges from solar only; `program_6_charging` is always `Disabled`.
-Time of Use is always Enabled; **Program 6 is the active program** (its `time`
+Time of Use is always on (option `Week` = all 7 days enabled); **Program 6 is the active program** (its `time`
 is fixed at `00:00:00`). Each apply recomputes Program 6's SOC threshold and
 work_mode for the upcoming slot.
 
@@ -252,7 +252,7 @@ Verify that the option strings match your inverter's exact labels:
 |---|---|---|
 | `work_mode` | `Zero Export To CT` / `Export First` | `select.deye_inverter_work_mode` → `options` attribute |
 | `energy_pattern` | `Load First` | `select.deye_inverter_energy_pattern` → `options` |
-| `time_of_use` | `Enabled` | `select.deye_inverter_time_of_use` → `options` |
+| `time_of_use` | `Week` | `select.deye_inverter_time_of_use` → `options` |
 | `program_6_charging` (and 1–5) | `Disabled` | `select.deye_inverter_program_6_charging` → `options` |
 
 Adjust `program.discharge_power` (W) and `program.target_soc_floor` (%) to

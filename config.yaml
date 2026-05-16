@@ -58,7 +58,7 @@ modes:
     energy_pattern: "Load First"
     export_surplus: false
     smart_load: true
-    time_of_use: "Enabled"
+    time_of_use: "Week"
 
   positive_export:  # daytime positive slot with negatives still ahead today —
                     # preserve battery via SOC ratchet (max(current,26)) so the
@@ -67,7 +67,7 @@ modes:
     energy_pattern: "Load First"
     export_surplus: true
     smart_load: false
-    time_of_use: "Enabled"
+    time_of_use: "Week"
 
   positive_self_consume:  # no more negatives today, OR before sunrise / after
                           # sunset — battery freely discharges to home loads
@@ -77,4 +77,4 @@ modes:
     energy_pattern: "Load First"
     export_surplus: true     # Solar Sell — only PV surplus exports
     smart_load: true
-    time_of_use: "Enabled"
+    time_of_use: "Week"
