@@ -31,6 +31,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.yaml")
 SCHEDULE_FILE = os.path.join(SCRIPT_DIR, "schedule.json")
 SCHEDULE_NEXT_FILE = os.path.join(SCRIPT_DIR, "schedule_next.json")
+WRITE_COUNTER_FILE = os.path.join(SCRIPT_DIR, "write_counter.json")
 
 # Display timezone for user-facing output. Auto-handles CET ↔ CEST at DST.
 LOCAL_TZ = ZoneInfo("Europe/Bratislava")
@@ -154,12 +155,14 @@ class HAClient:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+        self.writes = 0  # incremented on each successful POST that changes state
 
     def _post(self, path: str, data: dict) -> None:
         resp = requests.post(
             f"{self.base}/api/{path}", headers=self.headers, json=data, timeout=10
         )
         resp.raise_for_status()
+        self.writes += 1
 
     def get_state(self, entity_id: str) -> dict:
         resp = requests.get(
@@ -227,6 +230,34 @@ def apply_mode(ha: HAClient, config: dict, mode_name: str) -> None:
     for switch_key in ("export_surplus", "smart_load"):
         if switch_key in deye and switch_key in mode_cfg:
             ha.set_switch(deye[switch_key], mode_cfg[switch_key])
+
+
+def record_writes(new_writes: int) -> None:
+    """Accumulate write count for the current local day. Logs yesterday's
+    total once when the day rolls over, so cron operators can eyeball churn
+    without parsing per-invocation logs."""
+    today = datetime.now(LOCAL_TZ).date().isoformat()
+    prev_date: str | None = None
+    prev_count = 0
+    if os.path.exists(WRITE_COUNTER_FILE):
+        try:
+            with open(WRITE_COUNTER_FILE) as f:
+                data = json.load(f)
+            prev_date = data.get("date")
+            prev_count = int(data.get("count", 0))
+        except (json.JSONDecodeError, ValueError, OSError) as e:
+            log.warning("write counter unreadable (%s); resetting", e)
+
+    if prev_date == today:
+        total = prev_count + new_writes
+    else:
+        if prev_date is not None:
+            log.info("Daily writes for %s: %d", prev_date, prev_count)
+        total = new_writes
+
+    with open(WRITE_COUNTER_FILE, "w") as f:
+        json.dump({"date": today, "count": total}, f)
+    log.info("Writes this run: %d | today total: %d", new_writes, total)
 
 
 def reset_safe_programs(ha: HAClient, config: dict) -> None:
@@ -352,6 +383,7 @@ def cmd_apply(config: dict) -> None:
     ha.set_select(deye["program_6_charging"], "Disabled")
 
     apply_mode(ha, config, mode_name)
+    record_writes(ha.writes)
     log.info("Done.")
 
 
